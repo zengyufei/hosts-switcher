@@ -1,0 +1,47 @@
+name: Publish
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  publish-tauri:
+    permissions:
+      contents: write
+    strategy:
+      fail-fast: false
+      matrix:
+        platform: [windows-latest] # Only building for Windows as requested
+
+    runs-on: ${{ matrix.platform }}
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: setup node
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      - name: install Rust stable
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: install dependencies (frontend)
+        run: npm install
+
+      - name: Build and Release
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # Creates a unique release for every build number to satisfy "Release on every commit"
+          tagName: build-${{ github.run_number }}
+          releaseName: 'Build ${{ github.run_number }}'
+          releaseBody: |
+            Auto-generated release from commit ${{ github.sha }}.
+            
+            **Downloads:**
+            See the Assets section below for the executable and installer.
+          releaseDraft: false
+          prerelease: false
