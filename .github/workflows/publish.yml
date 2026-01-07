@@ -28,7 +28,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        platform: [windows-latest, macos-latest]
+        platform: [windows-latest, macos-13, macos-14] # Windows, macOS Intel, macOS Apple Silicon
 
     runs-on: ${{ matrix.platform }}
     steps:
@@ -60,10 +60,22 @@ jobs:
           tagName: releases
           releaseName: 'Releases'
           releaseBody: |
-            This is the latest build.
+            This is the latest build. / 这是最新构建版本。
             
-            **Downloads:**
-            See assets below.
+            **Downloads / 下载:**
+            See assets below. / 请见下方资源列表。
+            
+            ---
+            **📱 MacOS Users (M1/M2/M3...)**: Please download the `_aarch64.dmg` file (aarch64 = arm64).
+            **📱 MacOS 用户 (M1/M2/M3...)**: 请下载 `_aarch64.dmg` 文件 (即 arm64 版本)。
+            
+            ⚠️ **"App is damaged" Error? / "应用已损坏" 报错?**
+            If you see "App is damaged and can't be opened", run this in Terminal:
+            若打开时提示“应用已损坏，无法打开”，请在终端运行以下命令：
+            ```bash
+            xattr -cr /Applications/hosts-switcher.app
+            ```
+            (Assuming you moved the app to the Applications folder / 假设您已将应用移动到了应用程序文件夹)
           releaseDraft: false
           prerelease: false
 
