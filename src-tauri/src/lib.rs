@@ -2,8 +2,6 @@ mod hosts;
 pub mod storage;
 pub mod cli;
 
-use tauri::Manager;
-use window_vibrancy::apply_mica;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {

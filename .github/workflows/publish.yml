@@ -122,8 +122,8 @@ jobs:
           if [[ "${{ matrix.args }}" == *"universal-apple-darwin"* ]]; then
             cargo build --release --bin hostly-core --target x86_64-apple-darwin
             cargo build --release --bin hostly-core --target aarch64-apple-darwin
-            mkdir -p src-tauri/target/universal-apple-darwin/release
-            lipo -create src-tauri/target/x86_64-apple-darwin/release/hostly-core src-tauri/target/aarch64-apple-darwin/release/hostly-core -output src-tauri/target/universal-apple-darwin/release/hostly-core
+            mkdir -p target/universal-apple-darwin/release
+            lipo -create target/x86_64-apple-darwin/release/hostly-core target/aarch64-apple-darwin/release/hostly-core -output target/universal-apple-darwin/release/hostly-core
           else
             cargo build --release --bin hostly-core ${{ matrix.args }}
           fi

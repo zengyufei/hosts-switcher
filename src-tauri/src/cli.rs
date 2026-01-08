@@ -25,8 +25,6 @@ fn check_elevation() {
         Err(_) => println!("[DIAGNOSTIC] Failed to check elevation"),
     }
 }
-#[cfg(not(windows))]
-fn check_elevation() {}
 
 #[derive(Parser)]
 #[command(name = "hostly")]
