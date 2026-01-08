@@ -1,11 +1,11 @@
-# Hosts Switcher
+# Hostly
 
-### Hosts Switcher (极简 Hosts 切换工具)
+### Hostly (极简 Hosts 切换工具)
 
 一个基于 Tauri v2 + Rust 构建的**极致轻量**、高性能 Hosts 管理工具。我们通过移除前端框架（迁移至 Vanilla JS），将体积和性能优化到了极点。
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/zengyufei/hosts-switcher/main/img/index.png" alt="Hosts Switcher Main Interface" width="600" />
+  <img src="https://raw.githubusercontent.com/zengyufei/hostly/main/img/index.png" alt="Hostly Main Interface" width="600" />
 </p>
 
 > 🤖 **特别说明**: 本项目由 AI 智能体 [Antigravity](https://gemini.google.com/) 深度参与设计与实现，追求极致的简洁与高效。
@@ -46,18 +46,18 @@ npm run tauri build
 
 ### 常用命令行操作
 
-`hosts-switcher` 是一个强大的命令行工具，支持自动化脚本调用。
+`hostly` 是一个强大的命令行工具，支持自动化脚本调用。
 
 > **提示**: 在 Windows 下运行 CLI 命令会自动请求 UAC 提权。
 
 | 命令 | 说明 | 示例 |
 | :--- | :--- | :--- |
-| `list` | 列出所有配置及其状态 | `hosts-switcher list` |
-| `open` | 激活一个或多个环境 | `hosts-switcher open --names Dev Test --multi` |
-| `close` | 关闭指定环境 | `hosts-switcher close --names Dev` |
-| `multi / single` | 切换全局选择模式 | `hosts-switcher multi` |
-| `export` | 导出配置或备份 | `hosts-switcher export --target backup.json` |
-| `import` | 导入配置或备份 | `hosts-switcher import --target my_hosts.txt --name NewEnv` |
+| `list` | 列出所有配置及其状态 | `hostly list` |
+| `open` | 激活一个或多个环境 | `hostly open --names Dev Test --multi` |
+| `close` | 关闭指定环境 | `hostly close --names Dev` |
+| `multi / single` | 切换全局选择模式 | `hostly multi` |
+| `export` | 导出配置或备份 | `hostly export --target backup.json` |
+| `import` | 导入配置或备份 | `hostly import --target my_hosts.txt --name NewEnv` |
 
 ## 🛠️ 常见问题
 

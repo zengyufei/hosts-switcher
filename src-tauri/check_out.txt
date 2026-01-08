@@ -1,0 +1,26 @@
+﻿cargo :     Checking hostly v0.1.0 (D:\cache\rust\hosts-
+switcher\src-tauri)
+所在位置 行:1 字符: 1
++ cargo check > check_out.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Checki 
+   ng ho...cher\src-tauri):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+error[E0255]: the name `__cmd__open_url` is defined mult
+iple times
+ --> src\lib.rs:9:8
+  |
+8 | #[tauri::command]
+  | ----------------- previous definition of the macro `
+__cmd__open_url` here
+9 | pub fn open_url(url: String) -> Result<(), String> {
+  |        ^^^^^^^^ `__cmd__open_url` reimported here
+  |
+  = note: `__cmd__open_url` must be defined only once in
+ the macro namespace of this module
+
+For more information about this error, try `rustc --expl
+ain E0255`.
+error: could not compile `hostly` (lib) due to 1 previou
+s error

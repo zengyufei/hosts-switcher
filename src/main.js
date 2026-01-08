@@ -25,6 +25,7 @@ const saveBtn = document.getElementById('save-btn');
 const renameBtn = document.getElementById('rename-btn');
 const addBtn = document.getElementById('add-profile-btn');
 const importBtn = document.getElementById('import-btn');
+const importSwitchHostsBtn = document.getElementById('import-switchhosts-btn');
 const exportBtn = document.getElementById('export-btn');
 const refreshBtn = document.getElementById('refresh-btn');
 const systemEditBtn = document.getElementById('system-edit-btn');
@@ -129,12 +130,18 @@ function renderList() {
         li.innerHTML = `
             <span class="status-dot"></span>
             <span class="name">${p.name}</span>
-            <span class="delete-row-btn" title="删除">🗑️</span>
+            <div class="row-actions">
+                <span class="toggle-row-btn" title="${p.active ? '禁用' : '启用'}">${p.active ? '禁用' : '启用'}</span>
+                <span class="delete-row-btn" title="删除">🗑️</span>
+            </div>
         `;
         
         li.onclick = (e) => {
             if (e.target.classList.contains('delete-row-btn')) {
                 deleteProfile(p.id, p.name);
+            } else if (e.target.classList.contains('toggle-row-btn')) {
+                e.stopPropagation();
+                toggleProfile(p.id);
             } else {
                 selectProfile(p.id);
             }
@@ -181,8 +188,16 @@ async function selectProfile(id) {
             } catch (e) { console.error(e); }
         }
     }
-    
-    renderList(); // Update active class
+    // Update active class for fixed list
+    document.querySelectorAll('#fixed-list .profile-item').forEach(li => {
+        if (li.dataset.id === id) {
+            li.classList.add('active');
+        } else {
+            li.classList.remove('active');
+        }
+    });
+
+    renderList(); // Update active class for custom profiles
 }
 
 async function saveCurrent() {
@@ -225,6 +240,19 @@ async function toggleProfile(id) {
     try {
         await invoke('toggle_profile_active', { id });
         await loadData();
+        
+        // Find profile to show specific name in toast
+        const config = await invoke('load_config');
+        const p = config.profiles.find(x => x.id === id);
+        if (p) {
+            showToast(`${p.name} 已${p.active ? '启用' : '禁用'}`, 'success');
+        }
+
+        // If current view is system hosts, refresh immediately
+        if (currentProfileId === 'system') {
+            const systemContent = await invoke('get_system_hosts');
+            editor.value = systemContent;
+        }
     } catch (e) {
         showToast(`切换失败: ${e}`, 'error');
     }
@@ -302,10 +330,16 @@ async function importData() {
     });
     if (selected) {
         try {
-            // Use backend command to bypass frontend FS permissions
             const content = await invoke('import_file', { path: selected });
             if (selected.endsWith('.json')) {
-                await invoke('import_data', { jsonContent: content });
+                // Try full backup format first, then fallback or check if it's SwitchHosts
+                try {
+                    await invoke('import_data', { jsonContent: content });
+                } catch (e) {
+                    // Maybe it's SwitchHosts? Let's try to parse it as SwitchHosts
+                    const count = await invoke('import_switchhosts', { jsonContent: content });
+                    showToast(`从小开关模式导入了 ${count} 个环境`, 'success');
+                }
             } else {
                 const name = selected.split(/[\/\\]/).pop().split('.')[0];
                 await invoke('create_profile', { name, content });
@@ -315,6 +349,22 @@ async function importData() {
         } catch (e) {
             showToast(`导入失败: ${e}`, 'error');
         }
+    }
+}
+
+async function importSwitchHosts() {
+    try {
+        const selected = await open({
+            filters: [{ name: 'JSON', extensions: ['json'] }]
+        });
+        if (selected) {
+            const data = await invoke('import_file', { path: selected });
+            const count = await invoke('import_switchhosts', { jsonContent: data });
+            await loadData();
+            showToast(`已从 SwitchHosts 导入 ${count} 个环境`, 'success');
+        }
+    } catch (e) {
+        showToast(`导入失败: ${e}`, 'error');
     }
 }
 
@@ -349,6 +399,8 @@ async function refreshData() {
     }, 500);
 }
 
+const githubLink = document.getElementById('github-link');
+
 // Event Listeners
 saveBtn.onclick = saveCurrent;
 renameBtn.onclick = renameProfile;
@@ -357,7 +409,12 @@ addBtn.onclick = () => showPrompt('新建配置', '', createProfile);
 multiToggle.onchange = toggleMultiSelect;
 refreshBtn.onclick = refreshData;
 importBtn.onclick = importData;
+importSwitchHostsBtn.onclick = importSwitchHosts;
 exportBtn.onclick = exportAll;
+
+githubLink.onclick = () => {
+    invoke('hostly_open_url', { url: 'https://github.com/zengyufei/Hostly' });
+};
 
 // Init
 window.addEventListener('DOMContentLoaded', async () => {

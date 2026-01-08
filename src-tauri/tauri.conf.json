@@ -1,8 +1,8 @@
 {
   "$schema": "https://schema.tauri.app/config/2",
-  "productName": "hosts-switcher",
+  "productName": "Hostly",
   "version": "0.1.0",
-  "identifier": "com.dyl.hosts-switcher",
+  "identifier": "com.hostly.app",
   "build": {
     "beforeDevCommand": "npm run dev",
     "devUrl": "http://127.0.0.1:5173",
@@ -13,7 +13,7 @@
     "withGlobalTauri": true,
     "windows": [
       {
-        "title": "hosts-switcher",
+        "title": "Hostly",
         "width": 800,
         "height": 600
       }

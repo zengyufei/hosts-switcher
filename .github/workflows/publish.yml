@@ -95,7 +95,7 @@ jobs:
             If you see "App is damaged and can't be opened", run this in Terminal:
             若打开时提示“应用已损坏，无法打开”，请在终端运行以下命令：
             ```bash
-            xattr -cr /Applications/hosts-switcher.app
+            xattr -cr /Applications/hostly.app
             ```
             (Assuming you moved the app to the Applications folder / 假设您已将应用移动到了应用程序文件夹)
           releaseDraft: false
@@ -105,12 +105,12 @@ jobs:
         if: matrix.platform == 'windows-latest'
         shell: pwsh
         run: |
-          upx --best src-tauri/target/release/hosts-switcher.exe
+          upx --best src-tauri/target/release/hostly.exe
 
       - name: Upload Portable EXE (Windows only)
         uses: softprops/action-gh-release@v1
         if: matrix.platform == 'windows-latest'
         with:
           tag_name: releases
-          files: src-tauri/target/release/hosts-switcher.exe
+          files: src-tauri/target/release/hostly.exe
           token: ${{ secrets.GITHUB_TOKEN }}

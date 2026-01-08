@@ -72,10 +72,28 @@ body {
     border-bottom: 1px solid var(--border-color);
 }
 
+.github-icon {
+    color: var(--text-dim);
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    align-items: center;
+    padding: 5px;
+    border-radius: 6px;
+}
+
+.github-icon:hover {
+    color: #fff;
+    background: rgba(255, 255, 255, 0.05);
+    transform: scale(1.1);
+}
+
 .sidebar-header h2 {
     font-size: 1.1rem;
     font-weight: 600;
 }
+
+
 
 button {
     cursor: pointer;
@@ -176,8 +194,8 @@ button#add-profile-btn {
     gap: 12px;
     padding: 5px 0;
     margin-bottom: 10px;
-    background: rgba(255, 255, 255, 0.02);
-    border-radius: 6px;
+    /* background: rgba(255, 255, 255, 0.02); */
+    /* border-radius: 6px; */
 }
 
 .mode-label {
@@ -229,18 +247,44 @@ ul {
     text-overflow: ellipsis;
 }
 
-.profile-item .delete-row-btn {
+.row-actions {
+    display: flex;
+    gap: 6px;
+    margin-left: auto;
     opacity: 0;
     transition: opacity 0.2s;
-    font-size: 0.8rem;
+    align-items: center;
 }
 
-.profile-item:hover .delete-row-btn {
-    opacity: 0.6;
-}
-
-.profile-item .delete-row-btn:hover {
+.profile-item:hover .row-actions {
     opacity: 1;
+}
+
+.toggle-row-btn, .delete-row-btn {
+    font-size: 11px;
+    cursor: pointer;
+    padding: 2px 6px;
+    border-radius: 4px;
+    transition: all 0.2s;
+    user-select: none;
+    line-height: 1.4;
+    border: 1px solid transparent;
+}
+
+.toggle-row-btn {
+    background: rgba(88, 166, 255, 0.1);
+    color: var(--accent-color);
+    border-color: rgba(88, 166, 255, 0.2);
+}
+
+.toggle-row-btn:hover {
+    background: var(--accent-color);
+    color: white;
+    transform: none;
+}
+
+.delete-row-btn:hover {
+    background: rgba(255, 68, 68, 0.2);
     color: var(--danger-color);
 }
 
@@ -255,11 +299,26 @@ ul {
 .mode-switch {
     display: flex;
     align-items: center;
-    justify-content: center;
-    gap: 10px;
-    background: rgba(255, 255, 255, 0.03);
+    justify-content: space-between;
+    gap: 8px;
+    padding: 0 10px;
+    /* background: rgba(255, 255, 255, 0.03); */
     border-radius: 8px;
-    border: 1px solid rgba(255, 255, 255, 0.05);
+    /* border: 1px solid rgba(255, 255, 255, 0.05); */
+}
+
+#import-switchhosts-btn {
+    font-size: 10px;
+    padding: 3px 6px;
+    background: rgba(88, 166, 255, 0.1);
+    color: var(--accent-color);
+    border: 1px solid rgba(88, 166, 255, 0.2);
+    margin-left: auto;
+}
+
+#import-switchhosts-btn:hover {
+    background: var(--accent-color);
+    color: white;
 }
 
 .footer-actions {

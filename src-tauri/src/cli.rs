@@ -29,7 +29,7 @@ fn check_elevation() {
 fn check_elevation() {}
 
 #[derive(Parser)]
-#[command(name = "hosts-switcher")]
+#[command(name = "hostly")]
 #[command(version = "1.0")]
 
 struct Cli {
@@ -103,9 +103,9 @@ pub fn run_cli(app: &AppHandle) -> bool {
     }
 
     // Try parsing. If it fails (e.g. invalid command), clap usually prints help and exits.
-    // However, if we just run `hosts-switcher.exe`, we want GUI.
+    // However, if we just run `hostly.exe`, we want GUI.
     // We already checked len <= 1. 
-    // But what if user runs `hosts-switcher.exe --random-flag`? Clap will error.
+    // But what if user runs `hostly.exe --random-flag`? Clap will error.
     // That's fine, we want CLI behavior if args are present.
 
     let cli = match Cli::try_parse() {

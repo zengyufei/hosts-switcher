@@ -1,0 +1,11 @@
+﻿cargo :     Checking hostly v0.1.0 (D:\cache\rust\hosts-
+switcher\src-tauri)
+所在位置 行:1 字符: 1
++ cargo check > check_out_4.txt 2>&1
++ ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+    + CategoryInfo          : NotSpecified: (    Checki 
+   ng ho...cher\src-tauri):String) [], RemoteException
+    + FullyQualifiedErrorId : NativeCommandError
+ 
+    Finished `dev` profile [unoptimized + debuginfo] tar
+get(s) in 1.72s

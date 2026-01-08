@@ -28,6 +28,7 @@ pub fn run() {
             hosts::get_system_hosts,
             hosts::save_system_hosts,
             hosts::check_write_permission,
+            hosts::hostly_open_url,
             storage::load_config,
             storage::load_common_config,
             storage::save_common_config,
@@ -43,6 +44,7 @@ pub fn run() {
             storage::export_file,
             storage::import_data,
             storage::export_data,
+            storage::import_switchhosts,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
