@@ -12,7 +12,7 @@ pub fn run() {
         .plugin(tauri_plugin_dialog::init())
         .setup(|app| {
             // Check CLI args
-            if cli::run_cli(app.handle()) {
+            if cli::run_cli(Some(&app.handle())) {
                 std::process::exit(0);
             }
 

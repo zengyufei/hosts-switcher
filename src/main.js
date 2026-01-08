@@ -332,14 +332,7 @@ async function importData() {
         try {
             const content = await invoke('import_file', { path: selected });
             if (selected.endsWith('.json')) {
-                // Try full backup format first, then fallback or check if it's SwitchHosts
-                try {
-                    await invoke('import_data', { jsonContent: content });
-                } catch (e) {
-                    // Maybe it's SwitchHosts? Let's try to parse it as SwitchHosts
-                    const count = await invoke('import_switchhosts', { jsonContent: content });
-                    showToast(`从小开关模式导入了 ${count} 个环境`, 'success');
-                }
+                await invoke('import_data', { jsonContent: content });
             } else {
                 const name = selected.split(/[\/\\]/).pop().split('.')[0];
                 await invoke('create_profile', { name, content });

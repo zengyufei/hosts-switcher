@@ -30,29 +30,64 @@ pub struct ProfileData {
     pub active: bool,
 }
 
-fn get_app_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    app.path().app_data_dir().map_err(|e| e.to_string())
+pub enum Context<'a> {
+    Tauri(&'a AppHandle),
+    Headless,
 }
 
-fn get_profiles_dir(app: &AppHandle) -> Result<PathBuf, String> {
-    let dir = get_app_dir(app)?.join("profiles");
+impl<'a> Context<'a> {
+    pub fn get_app_dir(&self) -> Result<PathBuf, String> {
+        match self {
+            Context::Tauri(app) => app.path().app_data_dir().map_err(|e| e.to_string()),
+            Context::Headless => {
+                // Hardcoded fallback for headless CLI to match Tauri's app_data_dir for "com.hostly.app"
+                #[cfg(target_os = "windows")]
+                {
+                    let base = std::env::var("APPDATA").map(PathBuf::from).map_err(|_| "APPDATA env var not found")?;
+                    Ok(base.join("com.hostly.switcher"))
+                }
+                #[cfg(target_os = "macos")]
+                {
+                    let home = std::env::var("HOME").map(PathBuf::from).map_err(|_| "HOME env var not found")?;
+                    Ok(home.join("Library/Application Support/com.hostly.switcher"))
+                }
+                #[cfg(target_os = "linux")]
+                {
+                    if let Ok(data_home) = std::env::var("XDG_DATA_HOME") {
+                        Ok(PathBuf::from(data_home).join("com.hostly.switcher"))
+                    } else {
+                        let home = std::env::var("HOME").map(PathBuf::from).map_err(|_| "HOME env var not found")?;
+                        Ok(home.join(".local/share/com.hostly.switcher"))
+                    }
+                }
+            }
+        }
+    }
+}
+
+fn get_profiles_dir(ctx: &Context) -> Result<PathBuf, String> {
+    let dir = ctx.get_app_dir()?.join("profiles");
     if !dir.exists() {
         fs::create_dir_all(&dir).map_err(|e| e.to_string())?;
     }
     Ok(dir)
 }
 
-fn get_config_path(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(get_app_dir(app)?.join("config.json"))
+fn get_config_path(ctx: &Context) -> Result<PathBuf, String> {
+    Ok(ctx.get_app_dir()?.join("config.json"))
 }
 
-fn get_common_path(app: &AppHandle) -> Result<PathBuf, String> {
-    Ok(get_app_dir(app)?.join("common.txt"))
+fn get_common_path(ctx: &Context) -> Result<PathBuf, String> {
+    Ok(ctx.get_app_dir()?.join("common.txt"))
 }
 
 #[tauri::command]
 pub fn load_config(app: AppHandle) -> Result<AppConfig, String> {
-    let path = get_config_path(&app)?;
+    load_config_internal(&Context::Tauri(&app))
+}
+
+pub fn load_config_internal(ctx: &Context) -> Result<AppConfig, String> {
+    let path = get_config_path(ctx)?;
     if !path.exists() {
         // First Run: Create defaults
         let mut config = AppConfig::default();
@@ -62,11 +97,10 @@ pub fn load_config(app: AppHandle) -> Result<AppConfig, String> {
         
         // 1. Auto-backup System Hosts
         let sys_id = Uuid::new_v4().to_string();
-        let sys_hosts_content = crate::hosts::get_system_hosts(); // Might fail if no permission read? usually read is ok.
-        // If fail, empty.
+        let sys_hosts_content = crate::hosts::get_system_hosts();
         let sys_content = sys_hosts_content.unwrap_or_else(|_| "# Backup failed".to_string());
         
-        save_profile_file(&app, &sys_id, &sys_content)?;
+        save_profile_file_internal(ctx, &sys_id, &sys_content)?;
         config.profiles.push(ProfileMetadata {
             id: sys_id,
             name: "系统hosts备份".to_string(),
@@ -76,7 +110,7 @@ pub fn load_config(app: AppHandle) -> Result<AppConfig, String> {
         // 2. Default Envs
         for name in defaults {
              let id = Uuid::new_v4().to_string();
-             save_profile_file(&app, &id, "# New Environment\n")?;
+             save_profile_file_internal(ctx, &id, "# New Environment\n")?;
              config.profiles.push(ProfileMetadata {
                  id,
                  name: name.to_string(),
@@ -84,7 +118,7 @@ pub fn load_config(app: AppHandle) -> Result<AppConfig, String> {
              });
         }
         
-        save_config_internal(&app, &config)?;
+        save_config_internal(ctx, &config)?;
         return Ok(config);
     }
     
@@ -92,8 +126,8 @@ pub fn load_config(app: AppHandle) -> Result<AppConfig, String> {
     serde_json::from_str(&content).map_err(|e| e.to_string())
 }
 
-fn save_config_internal(app: &AppHandle, config: &AppConfig) -> Result<(), String> {
-    let path = get_config_path(app)?;
+pub fn save_config_internal(ctx: &Context, config: &AppConfig) -> Result<(), String> {
+    let path = get_config_path(ctx)?;
     if let Some(parent) = path.parent() {
         if !parent.exists() {
              fs::create_dir_all(parent).map_err(|e| e.to_string())?;
@@ -103,15 +137,19 @@ fn save_config_internal(app: &AppHandle, config: &AppConfig) -> Result<(), Strin
     fs::write(path, content).map_err(|e| e.to_string())
 }
 
-fn save_profile_file(app: &AppHandle, id: &str, content: &str) -> Result<(), String> {
-    let dir = get_profiles_dir(app)?;
+pub fn save_profile_file_internal(ctx: &Context, id: &str, content: &str) -> Result<(), String> {
+    let dir = get_profiles_dir(ctx)?;
     let path = dir.join(format!("{}.txt", id));
     fs::write(path, content).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn load_common_config(app: AppHandle) -> Result<String, String> {
-    let path = get_common_path(&app)?;
+    load_common_config_internal(&Context::Tauri(&app))
+}
+
+pub fn load_common_config_internal(ctx: &Context) -> Result<String, String> {
+    let path = get_common_path(ctx)?;
     if !path.exists() {
         return Ok(String::new());
     }
@@ -120,15 +158,23 @@ pub fn load_common_config(app: AppHandle) -> Result<String, String> {
 
 #[tauri::command]
 pub fn save_common_config(app: AppHandle, content: String) -> Result<(), String> {
-    let path = get_common_path(&app)?;
-    fs::write(path, content).map_err(|e| e.to_string())?;
+    save_common_config_internal(&Context::Tauri(&app), content)?;
     apply_config(app)
+}
+
+pub fn save_common_config_internal(ctx: &Context, content: String) -> Result<(), String> {
+    let path = get_common_path(ctx)?;
+    fs::write(path, content).map_err(|e| e.to_string())
 }
 
 #[tauri::command]
 pub fn list_profiles(app: AppHandle) -> Result<Vec<ProfileData>, String> {
-    let config = load_config(app.clone())?;
-    let dir = get_profiles_dir(&app)?;
+    list_profiles_internal(&Context::Tauri(&app))
+}
+
+pub fn list_profiles_internal(ctx: &Context) -> Result<Vec<ProfileData>, String> {
+    let config = load_config_internal(ctx)?;
+    let dir = get_profiles_dir(ctx)?;
     
     let mut profiles = Vec::new();
     
@@ -153,7 +199,11 @@ pub fn list_profiles(app: AppHandle) -> Result<Vec<ProfileData>, String> {
 
 #[tauri::command]
 pub fn create_profile(app: AppHandle, name: String, content: Option<String>) -> Result<String, String> {
-    let mut config = load_config(app.clone())?;
+    create_profile_internal(&Context::Tauri(&app), name, content)
+}
+
+pub fn create_profile_internal(ctx: &Context, name: String, content: Option<String>) -> Result<String, String> {
+    let mut config = load_config_internal(ctx)?;
     
     // Check for duplicate name
     if config.profiles.iter().any(|p| p.name == name) {
@@ -162,7 +212,7 @@ pub fn create_profile(app: AppHandle, name: String, content: Option<String>) -> 
 
     let id = Uuid::new_v4().to_string();
     let initial_content = content.unwrap_or_default();
-    save_profile_file(&app, &id, &initial_content)?;
+    save_profile_file_internal(ctx, &id, &initial_content)?;
     
     config.profiles.push(ProfileMetadata {
         id: id.clone(),
@@ -170,34 +220,43 @@ pub fn create_profile(app: AppHandle, name: String, content: Option<String>) -> 
         active: false,
     });
     
-    save_config_internal(&app, &config)?;
+    save_config_internal(ctx, &config)?;
     Ok(id)
 }
 
 #[tauri::command]
 pub fn save_profile_content(app: AppHandle, id: String, content: String) -> Result<(), String> {
-    save_profile_file(&app, &id, &content)?;
+    let ctx = Context::Tauri(&app);
+    save_profile_content_internal(&ctx, &id, &content)?;
     
     // If this profile is active, re-apply config to system hosts
-    let config = load_config(app.clone())?;
+    let config = load_config_internal(&ctx)?;
     if config.profiles.iter().any(|p| p.id == id && p.active) {
         apply_config(app)?;
     }
     Ok(())
 }
 
+pub fn save_profile_content_internal(ctx: &Context, id: &str, content: &str) -> Result<(), String> {
+    save_profile_file_internal(ctx, id, content)
+}
+
 #[tauri::command]
 pub fn delete_profile(app: AppHandle, id: String) -> Result<(), String> {
-    let mut config = load_config(app.clone())?;
+    delete_profile_internal(&Context::Tauri(&app), &id)
+}
+
+pub fn delete_profile_internal(ctx: &Context, id: &str) -> Result<(), String> {
+    let mut config = load_config_internal(ctx)?;
     
     // Remove from config
     if let Some(idx) = config.profiles.iter().position(|p| p.id == id) {
         config.profiles.remove(idx);
-        save_config_internal(&app, &config)?;
+        save_config_internal(ctx, &config)?;
     }
     
     // Delete file
-    let dir = get_profiles_dir(&app)?;
+    let dir = get_profiles_dir(ctx)?;
     let path = dir.join(format!("{}.txt", id));
     if path.exists() {
         let _ = fs::remove_file(path);
@@ -208,7 +267,11 @@ pub fn delete_profile(app: AppHandle, id: String) -> Result<(), String> {
 
 #[tauri::command]
 pub fn rename_profile(app: AppHandle, id: String, new_name: String) -> Result<(), String> {
-    let mut config = load_config(app.clone())?;
+    rename_profile_internal(&Context::Tauri(&app), &id, new_name)
+}
+
+pub fn rename_profile_internal(ctx: &Context, id: &str, new_name: String) -> Result<(), String> {
+    let mut config = load_config_internal(ctx)?;
     
     // Check for duplicate name (excluding itself)
     if config.profiles.iter().any(|p| p.name == new_name && p.id != id) {
@@ -217,55 +280,64 @@ pub fn rename_profile(app: AppHandle, id: String, new_name: String) -> Result<()
 
     if let Some(idx) = config.profiles.iter().position(|p| p.id == id) {
         config.profiles[idx].name = new_name;
-        save_config_internal(&app, &config)?;
+        save_config_internal(ctx, &config)?;
     }
     Ok(())
 }
 
 #[tauri::command]
 pub fn toggle_profile_active(app: AppHandle, id: String) -> Result<(), String> {
-     let mut config = load_config(app.clone())?;
-     
-     if config.multi_select {
-         // Toggle specific
-         if let Some(p) = config.profiles.iter_mut().find(|p| p.id == id) {
-             p.active = !p.active;
-         }
-     } else {
-         // Single select logic
-         // If clicking active, toggle off? Or do nothing? Usually toggle off or keep on.
-         // Let's say toggle off if already on.
-         let was_active = config.profiles.iter().find(|p| p.id == id).map(|p| p.active).unwrap_or(false);
-         
-         // Turn all off
-         for p in &mut config.profiles {
-             p.active = false;
-         }
-         
-         // If it wasn't active, turn it on
-         if !was_active {
-             if let Some(p) = config.profiles.iter_mut().find(|p| p.id == id) {
-                 p.active = true;
-             }
-         }
-     }
-     
-     save_config_internal(&app, &config)?;
-     apply_config(app)
+    toggle_profile_active_internal(&Context::Tauri(&app), &id)?;
+    apply_config(app)
+}
+
+pub fn toggle_profile_active_internal(ctx: &Context, id: &str) -> Result<(), String> {
+    let mut config = load_config_internal(ctx)?;
+    
+    if config.multi_select {
+        // Toggle specific
+        if let Some(p) = config.profiles.iter_mut().find(|p| p.id == id) {
+            p.active = !p.active;
+        }
+    } else {
+        // Single select logic
+        // If clicking active, toggle off? Or do nothing? Usually toggle off or keep on.
+        // Let's say toggle off if already on.
+        let was_active = config.profiles.iter().find(|p| p.id == id).map(|p| p.active).unwrap_or(false);
+        
+        // Turn all off
+        for p in &mut config.profiles {
+            p.active = false;
+        }
+        
+        // If it wasn't active, turn it on
+        if !was_active {
+            if let Some(p) = config.profiles.iter_mut().find(|p| p.id == id) {
+                p.active = true;
+            }
+        }
+    }
+    
+    save_config_internal(ctx, &config)
 }
 
 #[tauri::command]
 pub fn set_multi_select(app: AppHandle, enable: bool) -> Result<(), String> {
-    let mut config = load_config(app.clone())?;
+    set_multi_select_internal(&Context::Tauri(&app), enable)?;
+    apply_config(app)
+}
+
+pub fn set_multi_select_internal(ctx: &Context, enable: bool) -> Result<(), String> {
+    let mut config = load_config_internal(ctx)?;
     config.multi_select = enable;
     
-    // If disabling multi-select, and multiple are active, keep only first?
+    // If disabling multi-select, and multiple are active, keep only first
     if !enable {
         let mut found = false;
         for p in &mut config.profiles {
             if p.active {
                 if found {
-                    p.active = false; 
+                    p.active = false;
                 } else {
                     found = true;
                 }
@@ -273,16 +345,19 @@ pub fn set_multi_select(app: AppHandle, enable: bool) -> Result<(), String> {
         }
     }
     
-    save_config_internal(&app, &config)?;
-    apply_config(app)
+    save_config_internal(ctx, &config)
 }
 
 #[tauri::command]
 pub fn apply_config(app: AppHandle) -> Result<(), String> {
-    let config = load_config(app.clone())?;
-    let common_config = load_common_config(app.clone()).unwrap_or_default();
+    apply_config_internal(&Context::Tauri(&app))
+}
+
+pub fn apply_config_internal(ctx: &Context) -> Result<(), String> {
+    let config = load_config_internal(ctx)?;
+    let common_config = load_common_config_internal(ctx).unwrap_or_default();
     
-    let profiles_dir = get_profiles_dir(&app)?;
+    let profiles_dir = get_profiles_dir(ctx)?;
     let mut merged_content = String::from("# Generated by Hostly\n\n");
     merged_content.push_str("### Common Config ###\n");
     merged_content.push_str(&common_config);
@@ -313,52 +388,54 @@ pub struct FullBackup {
     version: i32,
     timestamp: String,
     config: AppConfig,
-    common_content: String,
-    profiles_content: std::collections::HashMap<String, String>, // id -> content
+    // Support both new (Vec) and old (HashMap) formats for compatibility
+    profiles: Option<Vec<ProfileData>>,
+    profiles_content: Option<std::collections::HashMap<String, String>>,
 }
 
 #[tauri::command]
 pub fn import_data(app: AppHandle, json_content: String) -> Result<(), String> {
-    let backup: FullBackup = serde_json::from_str(&json_content).map_err(|e| format!("Invalid JSON: {}", e))?;
+    import_data_internal(&Context::Tauri(&app), json_content)?;
+    apply_config(app)
+}
+
+pub fn import_data_internal(ctx: &Context, json_content: String) -> Result<(), String> {
+    let backup: FullBackup = serde_json::from_str(&json_content).map_err(|e| e.to_string())?;
     
-    // Restore Common
-    save_common_config(app.clone(), backup.common_content)?;
+    // Reset config
+    save_config_internal(ctx, &backup.config)?;
     
-    // Restore Config (Metadata)
-    save_config_internal(&app, &backup.config)?;
-    
-    // Restore Profile Files
-    for (id, content) in backup.profiles_content {
-        save_profile_file(&app, &id, &content)?;
+    // Save each profile (New Version: Vec<ProfileData>)
+    if let Some(profiles) = backup.profiles {
+        for profile in profiles {
+            save_profile_file_internal(ctx, &profile.id, &profile.content)?;
+        }
+    } 
+    // Save each profile (Old Version: HashMap<id, content>)
+    else if let Some(profiles_content) = backup.profiles_content {
+        for (id, content) in profiles_content {
+            save_profile_file_internal(ctx, &id, &content)?;
+        }
     }
     
-    apply_config(app)
+    Ok(())
 }
 
 #[tauri::command]
 pub fn export_data(app: AppHandle) -> Result<String, String> {
-    let config = load_config(app.clone())?;
-    let common_content = load_common_config(app.clone())?;
-    
-    let dir = get_profiles_dir(&app)?;
-    let mut profiles_content = std::collections::HashMap::new();
-    
-    for p in &config.profiles {
-        let path = dir.join(format!("{}.txt", p.id));
-        let content = if path.exists() {
-             fs::read_to_string(path).unwrap_or_default()
-        } else {
-             String::new()
-        };
-        profiles_content.insert(p.id.clone(), content);
-    }
+    export_data_internal(&Context::Tauri(&app))
+}
+
+pub fn export_data_internal(ctx: &Context) -> Result<String, String> {
+    let config = load_config_internal(ctx)?;
+    let profiles = list_profiles_internal(ctx)?;
     
     let backup = FullBackup {
         version: 2,
         timestamp: chrono::Local::now().to_rfc3339(),
         config,
-        common_content,
-        profiles_content,
+        profiles: Some(profiles),
+        profiles_content: None,
     };
     
     serde_json::to_string_pretty(&backup).map_err(|e| e.to_string())
@@ -377,28 +454,39 @@ pub fn export_file(path: String, content: String) -> Result<(), String> {
 
 // ================= CLI Helpers =================
 // These functions are pub but not commands, used by cli.rs
-
-pub fn find_profile_id_by_name(app: &AppHandle, name: &str) -> Result<Option<String>, String> {
-    let config = load_config(app.clone())?;
-    Ok(config.profiles.into_iter().find(|p| p.name == name).map(|p| p.id))
+#[tauri::command]
+pub fn find_profile_id_by_name(app: AppHandle, name: String) -> Result<Option<String>, String> {
+    find_profile_id_by_name_internal(&Context::Tauri(&app), &name)
 }
 
-pub fn upsert_profile(app: &AppHandle, name: String, content: String) -> Result<String, String> {
-    // Check if exists
-    let existing_id = find_profile_id_by_name(app, &name)?;
-    
-    if let Some(id) = existing_id {
-        // Update content
-        save_profile_file(app, &id, &content)?;
+pub fn find_profile_id_by_name_internal(ctx: &Context, name: &str) -> Result<Option<String>, String> {
+    let config = load_config_internal(ctx)?;
+    Ok(config.profiles.iter().find(|p| p.name == name).map(|p| p.id.clone()))
+}
+
+#[tauri::command]
+pub fn upsert_profile(app: AppHandle, name: String, content: String) -> Result<String, String> {
+    upsert_profile_internal(&Context::Tauri(&app), name, content)
+}
+
+pub fn upsert_profile_internal(ctx: &Context, name: String, content: String) -> Result<String, String> {
+    if let Some(id) = find_profile_id_by_name_internal(ctx, &name)? {
+        save_profile_file_internal(ctx, &id, &content)?;
         Ok(id)
     } else {
-        // Create new
-        create_profile(app.clone(), name, Some(content))
+        create_profile_internal(ctx, name, Some(content))
     }
 }
 
 #[tauri::command]
 pub fn import_switchhosts(app: AppHandle, json_content: String) -> Result<usize, String> {
+    let ctx = Context::Tauri(&app);
+    let count = import_switchhosts_internal(&ctx, json_content)?;
+    apply_config(app)?;
+    Ok(count)
+}
+
+pub fn import_switchhosts_internal(ctx: &Context, json_content: String) -> Result<usize, String> {
     let raw: serde_json::Value = serde_json::from_str(&json_content).map_err(|e| format!("Invalid JSON: {}", e))?;
     
     // SwitchHosts v4+ format: data.list.tree (structure) + data.collection.hosts.data (content)
@@ -421,8 +509,7 @@ pub fn import_switchhosts(app: AppHandle, json_content: String) -> Result<usize,
         // Traverse tree
         if let Some(tree) = data.get("list").and_then(|l| l.get("tree")).and_then(|t| t.as_array()) {
             let mut count = 0;
-            parse_switchhosts_v4_tree(&app, tree, &content_map, &mut count)?;
-            apply_config(app)?;
+            parse_switchhosts_v4_tree_internal(ctx, tree, &content_map, &mut count)?;
             return Ok(count);
         }
     }
@@ -437,14 +524,13 @@ pub fn import_switchhosts(app: AppHandle, json_content: String) -> Result<usize,
     };
 
     let mut count = 0;
-    parse_switchhosts_items(&app, list, &mut count)?;
+    parse_switchhosts_items_internal(ctx, list, &mut count)?;
 
-    apply_config(app)?;
     Ok(count)
 }
 
-fn parse_switchhosts_v4_tree(
-    app: &AppHandle, 
+fn parse_switchhosts_v4_tree_internal(
+    ctx: &Context, 
     items: &Vec<serde_json::Value>, 
     content_map: &std::collections::HashMap<&str, &str>, 
     count: &mut usize
@@ -456,19 +542,19 @@ fn parse_switchhosts_v4_tree(
 
         if item_type == "folder" {
             if let Some(children) = item.get("children").and_then(|c| c.as_array()) {
-                parse_switchhosts_v4_tree(app, children, content_map, count)?;
+                parse_switchhosts_v4_tree_internal(ctx, children, content_map, count)?;
             }
         } else {
             // Find content in map or item itself
             let content = content_map.get(id).map(|c| *c).or_else(|| item.get("content").and_then(|v| v.as_str())).unwrap_or("");
-            upsert_profile(app, title.to_string(), content.to_string())?;
+            upsert_profile_internal(ctx, title.to_string(), content.to_string())?;
             *count += 1;
         }
     }
     Ok(())
 }
 
-fn parse_switchhosts_items(app: &AppHandle, items: &Vec<serde_json::Value>, count: &mut usize) -> Result<(), String> {
+fn parse_switchhosts_items_internal(ctx: &Context, items: &Vec<serde_json::Value>, count: &mut usize) -> Result<(), String> {
     for item in items {
         let title = item.get("title").and_then(|v| v.as_str()).unwrap_or("Unknown");
         let folder = item.get("folder").and_then(|v| v.as_bool())
@@ -477,11 +563,11 @@ fn parse_switchhosts_items(app: &AppHandle, items: &Vec<serde_json::Value>, coun
         
         if folder {
             if let Some(children) = item.get("children").and_then(|c| c.as_array()) {
-                parse_switchhosts_items(app, children, count)?;
+                parse_switchhosts_items_internal(ctx, children, count)?;
             }
         } else {
             let content = item.get("content").and_then(|v| v.as_str()).unwrap_or("");
-            upsert_profile(app, title.to_string(), content.to_string())?;
+            upsert_profile_internal(ctx, title.to_string(), content.to_string())?;
             *count += 1;
         }
     }

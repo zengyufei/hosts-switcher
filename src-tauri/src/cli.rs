@@ -89,7 +89,7 @@ enum Commands {
     }
 }
 
-pub fn run_cli(app: &AppHandle) -> bool {
+pub fn run_cli(app: Option<&AppHandle>) -> bool {
     #[cfg(windows)]
     check_elevation();
 
@@ -120,9 +120,14 @@ pub fn run_cli(app: &AppHandle) -> bool {
         }
     };
 
+    let ctx = match app {
+        Some(h) => storage::Context::Tauri(h),
+        None => storage::Context::Headless,
+    };
+
     match cli.command {
         Some(Commands::List) => {
-            match storage::list_profiles(app.clone()) {
+            match storage::list_profiles_internal(&ctx) {
                 Ok(profiles) => {
                     for p in profiles {
                         println!("{} [{}]", p.name, if p.active { "ACTIVE" } else { "OFF" });
@@ -132,50 +137,43 @@ pub fn run_cli(app: &AppHandle) -> bool {
             }
         },
         Some(Commands::Single) => {
-            if let Err(e) = storage::set_multi_select(app.clone(), false) {
+            if let Err(e) = storage::set_multi_select_internal(&ctx, false) {
                 eprintln!("Error setting single mode: {}", e);
             } else {
                  println!("Single selection mode enabled.");
+                 let _ = storage::apply_config_internal(&ctx);
             }
         },
         Some(Commands::Multi) => {
-             if let Err(e) = storage::set_multi_select(app.clone(), true) {
+             if let Err(e) = storage::set_multi_select_internal(&ctx, true) {
                 eprintln!("Error setting multi mode: {}", e);
             } else {
                  println!("Multi selection mode enabled.");
+                 let _ = storage::apply_config_internal(&ctx);
             }
         },
         Some(Commands::Open { names, multi }) => {
             if multi {
-                if let Err(e) = storage::set_multi_select(app.clone(), true) {
+                if let Err(e) = storage::set_multi_select_internal(&ctx, true) {
                     eprintln!("Error enabling multi-mode: {}", e);
                     return true;
                 }
             }
 
             // Check mode
-            let config = storage::load_config(app.clone()).unwrap_or_default();
+            let config = storage::load_config_internal(&ctx).unwrap_or_default();
             if !config.multi_select && names.len() > 1 {
                 eprintln!("Warning: Single select mode is active. Only the first profile '{}' will be activated.", names[0]);
                 eprintln!("Use --multi to enable multi-select mode automatically.");
             }
 
             for name in names {
-                if let Ok(Some(id)) = storage::find_profile_id_by_name(app, &name) {
-                    // Logic: Toggle if not active
-                    // toggle_profile_active command toggles. 
-                    // We want "Open" i.e. Ensure Active.
-                    // But backend `toggle_profile_active` logic is:
-                    // Multi: flip boolean.
-                    // Single: if active, turn all off? if inactive, turn it on (and others off).
-                    
-                    // We need a proper `set_active(id, true)` in backend or reuse toggle carefully.
-                    // Let's check state first.
-                    let current_profiles = storage::list_profiles(app.clone()).unwrap_or_default();
+                if let Ok(Some(id)) = storage::find_profile_id_by_name_internal(&ctx, &name) {
+                    let current_profiles = storage::list_profiles_internal(&ctx).unwrap_or_default();
                     let p = current_profiles.iter().find(|p| p.id == id);
                     if let Some(prof) = p {
                         if !prof.active {
-                             if let Err(e) = storage::toggle_profile_active(app.clone(), id) {
+                             if let Err(e) = storage::toggle_profile_active_internal(&ctx, &id) {
                                   eprintln!("Failed to open '{}': {}", name, e);
                              } else {
                                   println!("Opened '{}'", name);
@@ -188,15 +186,15 @@ pub fn run_cli(app: &AppHandle) -> bool {
                      eprintln!("Profile '{}' not found.", name);
                 }
             }
+            let _ = storage::apply_config_internal(&ctx);
         },
         Some(Commands::Close { names }) => {
              for name in names {
-                 if let Ok(Some(id)) = storage::find_profile_id_by_name(app, &name) {
-                      let current_profiles = storage::list_profiles(app.clone()).unwrap_or_default();
+                 if let Ok(Some(id)) = storage::find_profile_id_by_name_internal(&ctx, &name) {
+                      let current_profiles = storage::list_profiles_internal(&ctx).unwrap_or_default();
                       if let Some(prof) = current_profiles.iter().find(|p| p.id == id) {
                            if prof.active {
-                                // Toggle to turn off
-                                if let Err(e) = storage::toggle_profile_active(app.clone(), id) {
+                                if let Err(e) = storage::toggle_profile_active_internal(&ctx, &id) {
                                     eprintln!("Failed to close '{}': {}", name, e);
                                 } else {
                                     println!("Closed '{}'", name);
@@ -209,12 +207,13 @@ pub fn run_cli(app: &AppHandle) -> bool {
                       eprintln!("Profile '{}' not found.", name);
                  }
              }
+             let _ = storage::apply_config_internal(&ctx);
         },
         Some(Commands::Export { name, target }) => {
             if let Some(n) = name {
                 // Export Single
-                if let Ok(Some(id)) = storage::find_profile_id_by_name(app, &n) {
-                     let current_profiles = storage::list_profiles(app.clone()).unwrap_or_default();
+                if let Ok(Some(id)) = storage::find_profile_id_by_name_internal(&ctx, &n) {
+                     let current_profiles = storage::list_profiles_internal(&ctx).unwrap_or_default();
                      if let Some(p) = current_profiles.iter().find(|p| p.id == id) {
                           if let Err(e) = fs::write(&target, &p.content) {
                                eprintln!("Failed to write file: {}", e);
@@ -227,7 +226,7 @@ pub fn run_cli(app: &AppHandle) -> bool {
                 }
             } else {
                 // Export All
-                match storage::export_data(app.clone()) {
+                match storage::export_data_internal(&ctx) {
                      Ok(json) => {
                           if let Err(e) = fs::write(&target, json) {
                                eprintln!("Failed to write export file: {}", e);
@@ -254,70 +253,48 @@ pub fn run_cli(app: &AppHandle) -> bool {
                  }
              };
 
-             // Define profiles to open list
              let mut profiles_to_open = Vec::new();
-             
-             // If --open is present
              if let Some(args) = open {
                  if args.is_empty() {
-                     // Empty args: implies opening the IMPORTED profile (if named)
                      if let Some(n) = &name {
                          profiles_to_open.push(n.clone());
                      }
                  } else {
-                     // Explicit args
                      profiles_to_open = args;
                  }
              }
 
-
-
              if let Some(n) = name {
-                  // Import specific profile
-                  match storage::upsert_profile(app, n.clone(), content) {
-                       Ok(_) => {
-                            println!("Imported profile '{}'.", n);
-                       },
+                  match storage::upsert_profile_internal(&ctx, n.clone(), content) {
+                       Ok(_) => println!("Imported profile '{}'.", n),
                        Err(e) => eprintln!("Import failed: {}", e)
                   }
              } else {
-                  // No name specified. Check formatting.
-                  // If it ends with .json, assume it's a global backup.
                   if target.to_lowercase().ends_with(".json") {
-                      match storage::import_data(app.clone(), content) {
+                      match storage::import_data_internal(&ctx, content) {
                           Ok(_) => println!("Global backup imported from '{}'.", target),
                           Err(e) => eprintln!("Failed to import global backup: {}", e),
                       }
                   } else {
-                       // Otherwise treat as Common Config
-                       match storage::save_common_config(app.clone(), content) {
-                            Ok(_) => {
-                                 println!("Common config updated from '{}'.", target);
-                                 let _ = storage::apply_config(app.clone());
-                            },
+                       match storage::save_common_config_internal(&ctx, content) {
+                            Ok(_) => println!("Common config updated from '{}'.", target),
                             Err(e) => eprintln!("Failed to save common config: {}", e)
                        }
                   }
              }
 
-             // Auto Multi-mode check
              if profiles_to_open.len() > 1 || multi {
-                  if let Err(e) = storage::set_multi_select(app.clone(), true) {
+                  if let Err(e) = storage::set_multi_select_internal(&ctx, true) {
                       eprintln!("Error enabling multi-select mode: {}", e);
-                  } else {
-                      if profiles_to_open.len() > 1 {
-                          println!("Auto-enabled multi-select mode for {} profiles.", profiles_to_open.len());
-                      }
                   }
              }
 
-             // Post-import Open Logic
              for p_name in profiles_to_open {
-                 if let Ok(Some(pid)) = storage::find_profile_id_by_name(app, &p_name) {
-                      let list = storage::list_profiles(app.clone()).unwrap_or_default();
+                 if let Ok(Some(pid)) = storage::find_profile_id_by_name_internal(&ctx, &p_name) {
+                      let list = storage::list_profiles_internal(&ctx).unwrap_or_default();
                       if let Some(p) = list.iter().find(|p| p.id == pid) {
                            if !p.active {
-                                let _ = storage::toggle_profile_active(app.clone(), pid);
+                                let _ = storage::toggle_profile_active_internal(&ctx, &pid);
                                 println!("Profile '{}' activated.", p_name);
                            } else {
                                 println!("Profile '{}' is already active.", p_name);
@@ -327,6 +304,7 @@ pub fn run_cli(app: &AppHandle) -> bool {
                       eprintln!("Warning: Cannot open profile '{}' (not found).", p_name);
                  }
              }
+             let _ = storage::apply_config_internal(&ctx);
         },
         None => return false // No subcommand, run GUI
     }

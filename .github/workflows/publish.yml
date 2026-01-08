@@ -100,22 +100,61 @@ jobs:
             If you see "App is damaged and can't be opened", run this in Terminal:
             若打开时提示“应用已损坏，无法打开”，请在终端运行以下命令：
             ```bash
-            xattr -cr /Applications/hostly.app
+            xattr -cr /Applications/Hostly.app
             ```
             (Assuming you moved the app to the Applications folder / 假设您已将应用移动到了应用程序文件夹)
           releaseDraft: false
           prerelease: false
+
+      - name: Build Hostly-Core (Standalone CLI)
+        run: cargo build --release --bin hostly-core ${{ matrix.args }}
+        working-directory: src-tauri
+
+      - name: Prepare Hostly-Core Path (Unix)
+        if: matrix.platform != 'windows-latest'
+        run: |
+          if [[ "${{ matrix.args }}" == *"--target"* ]]; then
+            TARGET=$(echo "${{ matrix.args }}" | grep -oP '(?<=--target )[^ ]+')
+            SRC="src-tauri/target/$TARGET/release/hostly-core"
+          else
+            SRC="src-tauri/target/release/hostly-core"
+          fi
+          
+          if [[ "${{ matrix.platform }}" == "macos-latest" ]]; then
+            if [[ "${{ matrix.args }}" == *"aarch64"* ]]; then DEST="hostly-core-macos-arm64"; fi
+            if [[ "${{ matrix.args }}" == *"x86_64"* ]]; then DEST="hostly-core-macos-x64"; fi
+            if [[ "${{ matrix.args }}" == *"universal"* ]]; then DEST="hostly-core-macos-universal"; fi
+          elif [[ "${{ matrix.platform }}" == "ubuntu-22.04" ]]; then
+            DEST="hostly-core-linux-x64"
+          elif [[ "${{ matrix.platform }}" == "ubuntu-24.04-arm" ]]; then
+            DEST="hostly-core-linux-arm64"
+          fi
+          cp "$SRC" "$DEST"
+
+      - name: Prepare Hostly-Core Path (Windows)
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: |
+          cp src-tauri/target/release/hostly-core.exe hostly-core-win-x64.exe
 
       - name: UPX Compress (Windows only)
         if: matrix.platform == 'windows-latest'
         shell: pwsh
         run: |
           upx --best src-tauri/target/release/hostly.exe
+          upx --best hostly-core-win-x64.exe
 
-      - name: Upload Portable EXE (Windows only)
+      - name: Upload Binaries
         uses: softprops/action-gh-release@v1
-        if: matrix.platform == 'windows-latest'
         with:
           tag_name: releases
-          files: src-tauri/target/release/hostly.exe
+          files: |
+            src-tauri/target/release/hostly.exe
+            hostly-core-win-x64.exe
+            hostly-core-macos-arm64
+            hostly-core-macos-x64
+            hostly-core-macos-universal
+            hostly-core-linux-x64
+            hostly-core-linux-arm64
           token: ${{ secrets.GITHUB_TOKEN }}
+          fail_on_unmatched_files: false
