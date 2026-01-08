@@ -105,7 +105,7 @@ jobs:
         if: matrix.platform == 'windows-latest'
         shell: pwsh
         run: |
-          upx --ultra --best src-tauri/target/release/hosts-switcher.exe
+          upx --best src-tauri/target/release/hosts-switcher.exe
 
       - name: Upload Portable EXE (Windows only)
         uses: softprops/action-gh-release@v1
