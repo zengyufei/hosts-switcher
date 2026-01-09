@@ -308,7 +308,6 @@ pub fn run_cli(app: Option<&AppHandle>) -> bool {
                       eprintln!("Warning: Cannot open profile '{}' (not found).", p_name);
                  }
              }
-             }
              let _ = storage::apply_config_internal(&ctx);
         },
         Some(Commands::Migration { target }) => {
